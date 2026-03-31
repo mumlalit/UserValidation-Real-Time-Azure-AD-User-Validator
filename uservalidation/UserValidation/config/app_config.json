@@ -1,0 +1,10 @@
+{
+    "log_retention_days": 90,
+    "admin_email": "admin@yourdomain.com",
+    "server_ip": "192.168.0.10",
+    "install_path": "C:\\UserValidation",
+    "max_concurrent_queries": 5,
+    "max_upload_size_mb": 50,
+    "port": 8080,
+    "batch_size": 10
+}

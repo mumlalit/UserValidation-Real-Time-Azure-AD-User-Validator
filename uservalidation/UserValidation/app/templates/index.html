@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Validation System - Real-Time</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 50px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #0066cc 0%, #004999 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        .header h1 { font-size: 2.5em; margin-bottom: 10px; }
+        .header .subtitle {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        .header .badge {
+            display: inline-block;
+            margin-top: 15px;
+            padding: 8px 20px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 20px;
+            font-size: 0.9em;
+        }
+        .content { padding: 40px; }
+        
+        /* Upload Section */
+        .upload-section {
+            background: #f8f9fa;
+            padding: 50px;
+            border-radius: 10px;
+            text-align: center;
+            border: 3px dashed #ccc;
+            margin-bottom: 30px;
+            transition: all 0.3s;
+        }
+        .upload-section.dragover {
+            border-color: #0066cc;
+            background: #e6f2ff;
+            transform: scale(1.02);
+        }
+        .upload-section h2 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .upload-section p {
+            color: #666;
+            margin-bottom: 25px;
+        }
+        .file-input { display: none; }
+        .upload-btn {
+            background: #0066cc;
+            color: white;
+            padding: 18px 50px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.2em;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(0,102,204,0.3);
+        }
+        .upload-btn:hover {
+            background: #0052a3;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,102,204,0.4);
+        }
+        .file-name {
+            margin-top: 20px;
+            color: #666;
+            font-size: 1.1em;
+        }
+        
+        /* Progress Section */
+        .progress-section {
+            display: none;
+            margin: 30px 0;
+            padding: 30px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+        .progress-section.active { display: block; }
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .progress-header h3 {
+            color: #333;
+        }
+        .progress-percentage {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #0066cc;
+        }
+        .progress-bar-container {
+            width: 100%;
+            height: 30px;
+            background: #e0e0e0;
+            border-radius: 15px;
+            overflow: hidden;
+            margin-bottom: 15px;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #0066cc 0%, #00aaff 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 10px;
+            color: white;
+            font-weight: bold;
+        }
+        .progress-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            font-size: 0.95em;
+            color: #666;
+        }
+        .progress-details div {
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+        }
+        .progress-details label {
+            font-weight: 600;
+            margin-right: 5px;
+        }
+        .current-user {
+            margin-top: 15px;
+            padding: 12px;
+            background: white;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #666;
+        }
+        .status-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        .status-dot.active { background: #28a745; }
+        .status-dot.terminated { background: #dc3545; }
+        .status-dot.not_found { background: #ffc107; }
+        
+        /* Results Section */
+        .results {
+            display: none;
+            margin-top: 30px;
+            padding: 30px;
+            border-radius: 10px;
+        }
+        .results.active { display: block; }
+        .results.success {
+            background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+            border: 2px solid #28a745;
+        }
+        .results.error {
+            background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+            border: 2px solid #dc3545;
+        }
+        .results-header {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+        .results-header h2 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        .result-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin: 25px 0;
+        }
+        .result-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .result-card .label {
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+        .result-card .value {
+            font-size: 2em;
+            font-weight: bold;
+        }
+        .result-card.total .value { color: #333; }
+        .result-card.success .value { color: #28a745; }
+        .result-card.error .value { color: #dc3545; }
+        .result-card.warning .value { color: #ffc107; }
+        
+        .action-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 25px;
+        }
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 6px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .btn-download {
+            background: #28a745;
+            color: white;
+        }
+        .btn-download:hover {
+            background: #218838;
+            transform: translateY(-2px);
+        }
+        .btn-new {
+            background: #0066cc;
+            color: white;
+        }
+        .btn-new:hover {
+            background: #0052a3;
+            transform: translateY(-2px);
+        }
+        
+        /* Loading Animation */
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #0066cc;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 User Validation System</h1>
+            <p class="subtitle">Real-Time Active Directory Validation</p>
+            <div class="badge">⚡ Instant Results</div>
+        </div>
+        
+        <div class="content">
+            <!-- Upload Section -->
+            <div class="upload-section" id="uploadSection">
+                <h2>Upload Your User List</h2>
+                <p>Supported formats: Excel (.xlsx, .xls) or CSV</p>
+                <input type="file" id="fileInput" class="file-input" accept=".xlsx,.xls,.csv">
+                <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                    📁 Choose File to Validate
+                </button>
+                <div class="file-name" id="fileName"></div>
+            </div>
+            
+            <!-- Progress Section -->
+            <div class="progress-section" id="progressSection">
+                <div class="progress-header">
+                    <h3><span class="spinner"></span>Validating Users...</h3>
+                    <div class="progress-percentage" id="progressPercentage">0%</div>
+                </div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar" id="progressBar"></div>
+                </div>
+                <div class="progress-details">
+                    <div>
+                        <label>Processing:</label>
+                        <span id="currentCount">0</span> / <span id="totalCount">0</span>
+                    </div>
+                    <div>
+                        <label>Speed:</label>
+                        <span id="usersPerSecond">0</span> users/sec
+                    </div>
+                </div>
+                <div class="current-user" id="currentUser">
+                    Preparing validation...
+                </div>
+            </div>
+            
+            <!-- Results Section -->
+            <div class="results" id="results">
+                <div class="results-header">
+                    <h2 id="resultsTitle">Validation Complete</h2>
+                    <p id="resultsSubtitle"></p>
+                </div>
+                
+                <div class="result-grid">
+                    <div class="result-card total">
+                        <div class="label">Total Users</div>
+                        <div class="value" id="totalUsers">-</div>
+                    </div>
+                    <div class="result-card success">
+                        <div class="label">✅ Active</div>
+                        <div class="value" id="activeUsers">-</div>
+                    </div>
+                    <div class="result-card error">
+                        <div class="label">❌ Not Active</div>
+                        <div class="value" id="terminatedUsers">-</div>
+                    </div>
+                    <div class="result-card warning">
+                        <div class="label">⚠️ Not Found</div>
+                        <div class="value" id="invalidUsers">-</div>
+                    </div>
+                </div>
+                
+                <div class="action-buttons">
+                    <a href="#" class="btn btn-download" id="downloadBtn" style="display:none;">
+                        📄 Download Detailed Report
+                    </a>
+                    <button class="btn btn-new" onclick="resetValidation()">
+                        🔄 Validate Another File
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const socket = io();
+        const fileInput = document.getElementById('fileInput');
+        const fileName = document.getElementById('fileName');
+        const uploadSection = document.getElementById('uploadSection');
+        const progressSection = document.getElementById('progressSection');
+        const results = document.getElementById('results');
+        
+        let startTime;
+        
+        // Socket connection
+        socket.on('connect', () => {
+            console.log('Connected to server');
+        });
+        
+        // File selection
+        fileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                fileName.textContent = `Selected: ${file.name}`;
+                await uploadAndValidate(file);
+            }
+        });
+        
+        // Drag and drop
+        uploadSection.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadSection.classList.add('dragover');
+        });
+        
+        uploadSection.addEventListener('dragleave', () => {
+            uploadSection.classList.remove('dragover');
+        });
+        
+        uploadSection.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            uploadSection.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file) {
+                fileName.textContent = `Selected: ${file.name}`;
+                await uploadAndValidate(file);
+            }
+        });
+        
+        // Upload and validate
+        async function uploadAndValidate(file) {
+            try {
+                // Upload file
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (!data.success) {
+                    alert('Upload failed: ' + data.error);
+                    return;
+                }
+                
+                // Show progress section
+                uploadSection.style.display = 'none';
+                progressSection.classList.add('active');
+                results.classList.remove('active');
+                
+                startTime = Date.now();
+                
+                // Start validation via socket
+                socket.emit('validate_file', {
+                    filepath: data.filepath,
+                    filename: data.filename
+                });
+                
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+        
+        // Progress updates
+        socket.on('validation_progress', (data) => {
+            const percentage = data.percentage;
+            document.getElementById('progressBar').style.width = percentage + '%';
+            document.getElementById('progressPercentage').textContent = percentage + '%';
+            document.getElementById('currentCount').textContent = data.current;
+            document.getElementById('totalCount').textContent = data.total;
+            
+            // Calculate speed
+            const elapsed = (Date.now() - startTime) / 1000;
+            const speed = (data.current / elapsed).toFixed(1);
+            document.getElementById('usersPerSecond').textContent = speed;
+            
+            // Show current user with status
+            const statusDot = `<span class="status-dot ${data.status}"></span>`;
+            document.getElementById('currentUser').innerHTML = 
+                `${statusDot}Checking: ${data.user}`;
+        });
+        
+        // Validation complete
+        socket.on('validation_complete', (data) => {
+            progressSection.classList.remove('active');
+            results.classList.add('active');
+            
+            // Set result class
+            results.className = 'results active ' + (data.has_issues ? 'error' : 'success');
+            
+            // Update values
+            document.getElementById('totalUsers').textContent = data.total_users;
+            document.getElementById('activeUsers').textContent = data.active_users;
+            document.getElementById('terminatedUsers').textContent = data.terminated_users;
+            document.getElementById('invalidUsers').textContent = data.invalid_users;
+            
+            // Set title
+            const title = data.has_issues ? '⚠️ Issues Found!' : '✅ All Users Valid!';
+            document.getElementById('resultsTitle').textContent = title;
+            
+            const subtitle = `Processed ${data.total_users} users in ${data.duration_seconds.toFixed(1)} seconds`;
+            document.getElementById('resultsSubtitle').textContent = subtitle;
+            
+            // Download button
+            if (data.report_url) {
+                const downloadBtn = document.getElementById('downloadBtn');
+                downloadBtn.href = data.report_url;
+                downloadBtn.style.display = 'inline-block';
+            }
+        });
+        
+        // Validation error
+        socket.on('validation_error', (data) => {
+            progressSection.classList.remove('active');
+            alert('Validation error: ' + data.error);
+            resetValidation();
+        });
+        
+        // Reset for new validation
+        function resetValidation() {
+            uploadSection.style.display = 'block';
+            progressSection.classList.remove('active');
+            results.classList.remove('active');
+            fileName.textContent = '';
+            fileInput.value = '';
+        }
+    </script>
+</body>
+</html>
